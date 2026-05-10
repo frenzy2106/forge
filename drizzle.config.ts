@@ -1,4 +1,8 @@
+import { config } from 'dotenv';
 import type { Config } from 'drizzle-kit';
+
+// Next.js loads .env.local automatically; standalone scripts (drizzle-kit) don't.
+config({ path: '.env.local' });
 
 export default {
   schema: './src/db/schema.ts',
