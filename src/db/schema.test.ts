@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
-import { migrate } from 'drizzle-orm/libsql/migrator';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import * as schema from './schema';
+import { makeTestDb, type TestDb } from './__test-helpers__/test-db';
 
-let db: ReturnType<typeof drizzle>;
+let db: TestDb;
+let cleanup: () => void;
 
 // drizzle-orm/libsql wraps the underlying libSQL error and re-throws with a
 // generic "Failed query: ..." message. The semantic information is on the
@@ -51,14 +50,11 @@ async function expectSqliteError(
 }
 
 beforeEach(async () => {
-  // Fresh in-memory libSQL DB for each test, with FK enforcement explicitly ON.
-  // Hosted Turso has FKs ON by default; :memory: needs the pragma to make our
-  // RESTRICT/CASCADE tests assert real behaviour.
-  const client = createClient({ url: ':memory:' });
-  db = drizzle(client, { schema });
-  await db.run(sql`PRAGMA foreign_keys = ON`);
-  await migrate(db, { migrationsFolder: './drizzle/migrations' });
+  // Fresh temp-file libSQL DB per test (NOT :memory: — see test-db.ts for why).
+  // FK enforcement is turned on inside makeTestDb.
+  ({ db, cleanup } = await makeTestDb());
 });
+afterEach(() => cleanup());
 
 describe('schema: exercises', () => {
   it('has the expected columns (WORK-04: immutable IDs + display_name)', async () => {
