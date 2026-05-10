@@ -8,6 +8,13 @@
       "when": 1778426817315,
       "tag": "0000_cool_squirrel_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1778435995646,
+      "tag": "0001_full_schema",
+      "breakpoints": true
     }
   ]
 }

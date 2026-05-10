@@ -7,6 +7,49 @@ import * as schema from './schema';
 
 let db: ReturnType<typeof drizzle>;
 
+// drizzle-orm/libsql wraps the underlying libSQL error and re-throws with a
+// generic "Failed query: ..." message. The semantic information is on the
+// `cause` chain via the `code` / `extendedCode` property — match on those.
+async function expectSqliteError(
+  promise: Promise<unknown>,
+  expected: 'SQLITE_CONSTRAINT_UNIQUE' | 'SQLITE_CONSTRAINT_FOREIGNKEY',
+): Promise<void> {
+  try {
+    await promise;
+  } catch (err) {
+    // Walk the cause chain looking for a matching code / extendedCode.
+    const codes = new Set<string>();
+    let cur: unknown = err;
+    while (cur && typeof cur === 'object') {
+      const c = cur as { code?: string; extendedCode?: string | number; cause?: unknown };
+      if (c.code) codes.add(c.code);
+      if (c.extendedCode !== undefined) codes.add(String(c.extendedCode));
+      cur = c.cause;
+    }
+    // SQLITE_CONSTRAINT is the parent code; the extended code identifies the
+    // exact kind. libSQL is inconsistent: some FK violations come back as
+    // SQLITE_CONSTRAINT_FOREIGNKEY, others as SQLITE_CONSTRAINT_TRIGGER (when
+    // FKs are emulated via internal triggers). Both are valid signals that
+    // the schema-level constraint we declared is being enforced; accept either
+    // for FK assertions, but require the exact code for UNIQUE.
+    const fkKinds = new Set([
+      'SQLITE_CONSTRAINT_FOREIGNKEY',
+      'SQLITE_CONSTRAINT_TRIGGER',
+    ]);
+    const ok =
+      codes.has(expected) ||
+      (expected === 'SQLITE_CONSTRAINT_FOREIGNKEY' &&
+        [...codes].some((c) => fkKinds.has(c)));
+    if (!ok) {
+      throw new Error(
+        `Expected ${expected} error, got codes=${[...codes].join(',')} message=${String(err)}`,
+      );
+    }
+    return;
+  }
+  throw new Error(`Expected promise to reject with ${expected}, but it resolved.`);
+}
+
 beforeEach(async () => {
   // Fresh in-memory libSQL DB for each test, with FK enforcement explicitly ON.
   // Hosted Turso has FKs ON by default; :memory: needs the pragma to make our
@@ -44,13 +87,14 @@ describe('schema: exercises', () => {
       displayName: 'Incline Smith Press',
       category: 'push',
     });
-    await expect(
+    await expectSqliteError(
       db.insert(schema.exercises).values({
         slug: 'incline-smith-press',
         displayName: 'Different Display',
         category: 'push',
       }),
-    ).rejects.toThrow(/UNIQUE constraint failed/i);
+      'SQLITE_CONSTRAINT_UNIQUE',
+    );
   });
 });
 
@@ -80,9 +124,10 @@ describe('schema: routines + routine_exercises', () => {
     });
 
     // Deleting the exercise should be REJECTED while routine_exercises holds it.
-    await expect(
+    await expectSqliteError(
       db.delete(schema.exercises).where(eq(schema.exercises.id, ex.id)),
-    ).rejects.toThrow(/FOREIGN KEY constraint failed/i);
+      'SQLITE_CONSTRAINT_FOREIGNKEY',
+    );
 
     // Deleting the routine cascades to routine_exercises.
     await db.delete(schema.routines).where(eq(schema.routines.id, r.id));
@@ -157,9 +202,10 @@ describe('schema: session_exercises', () => {
     });
 
     // Cannot delete an exercise that has session_exercise history.
-    await expect(
+    await expectSqliteError(
       db.delete(schema.exercises).where(eq(schema.exercises.id, ex.id)),
-    ).rejects.toThrow(/FOREIGN KEY constraint failed/i);
+      'SQLITE_CONSTRAINT_FOREIGNKEY',
+    );
 
     // Deleting the session cascades to its session_exercises.
     await db.delete(schema.sessions).where(eq(schema.sessions.id, s.id));
