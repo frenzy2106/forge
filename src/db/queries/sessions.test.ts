@@ -10,7 +10,7 @@
 // state across `db.transaction()` calls.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, desc, and } from 'drizzle-orm';
 import * as schema from '../schema';
 import { makeTestDb, type TestDb } from '../__test-helpers__/test-db';
 
@@ -131,5 +131,173 @@ describe('createSessionFromRoutine: copy-on-create (WORK-02)', () => {
       .from(schema.sessionExercises)
       .where(eq(schema.sessionExercises.sessionId, sessionId));
     expect(se.length).toBe(0);
+  });
+});
+
+// HIST-04 (Plan 01-05): the routine filter on the home page's recent-sessions
+// list. The queries function takes an options bag with an optional `routineId`
+// — we replay the same query shape inline here against a hermetic DB.
+async function listRecentSessionsInline(
+  database: TestDb,
+  opts: { limit?: number; routineId?: string | null } = {},
+) {
+  const { limit = 20, routineId } = opts;
+  const conditions = [eq(schema.sessions.isDeleted, false)];
+  if (routineId) conditions.push(eq(schema.sessions.routineId, routineId));
+  const rows = await database
+    .select({
+      session: schema.sessions,
+      routineName: schema.routines.name,
+    })
+    .from(schema.sessions)
+    .leftJoin(schema.routines, eq(schema.sessions.routineId, schema.routines.id))
+    .where(and(...conditions))
+    .orderBy(desc(schema.sessions.startedAt))
+    .limit(limit);
+  return rows.map((row) => ({ ...row.session, routineName: row.routineName }));
+}
+
+describe('listRecentSessions: routine filter (HIST-04)', () => {
+  it('returns ALL non-deleted sessions when no routineId is supplied', async () => {
+    // Two routines, one blank (NULL routine_id), all non-deleted.
+    const [push] = await db
+      .insert(schema.routines)
+      .values({ slug: 'push', name: 'Push', position: 0 })
+      .returning();
+    const [pull] = await db
+      .insert(schema.routines)
+      .values({ slug: 'pull', name: 'Pull', position: 1 })
+      .returning();
+
+    await db.insert(schema.sessions).values([
+      {
+        id: 's-push-1',
+        routineId: push.id,
+        startedAt: '2026-05-08T10:00:00.000Z',
+        localDate: '2026-05-08',
+      },
+      {
+        id: 's-pull-1',
+        routineId: pull.id,
+        startedAt: '2026-05-09T10:00:00.000Z',
+        localDate: '2026-05-09',
+      },
+      {
+        id: 's-blank-1',
+        routineId: null,
+        startedAt: '2026-05-10T10:00:00.000Z',
+        localDate: '2026-05-10',
+      },
+    ]);
+
+    const all = await listRecentSessionsInline(db);
+    expect(all).toHaveLength(3);
+    // Newest first
+    expect(all.map((s) => s.id)).toEqual(['s-blank-1', 's-pull-1', 's-push-1']);
+    // Blank session has null routineName (left join produces this)
+    expect(all.find((s) => s.id === 's-blank-1')!.routineName).toBeNull();
+    expect(all.find((s) => s.id === 's-push-1')!.routineName).toBe('Push');
+  });
+
+  it('returns ONLY sessions matching the supplied routineId', async () => {
+    const [push] = await db
+      .insert(schema.routines)
+      .values({ slug: 'push', name: 'Push', position: 0 })
+      .returning();
+    const [pull] = await db
+      .insert(schema.routines)
+      .values({ slug: 'pull', name: 'Pull', position: 1 })
+      .returning();
+
+    await db.insert(schema.sessions).values([
+      {
+        id: 's-push-1',
+        routineId: push.id,
+        startedAt: '2026-05-07T10:00:00.000Z',
+        localDate: '2026-05-07',
+      },
+      {
+        id: 's-pull-1',
+        routineId: pull.id,
+        startedAt: '2026-05-08T10:00:00.000Z',
+        localDate: '2026-05-08',
+      },
+      {
+        id: 's-push-2',
+        routineId: push.id,
+        startedAt: '2026-05-09T10:00:00.000Z',
+        localDate: '2026-05-09',
+      },
+      {
+        id: 's-blank-1',
+        routineId: null,
+        startedAt: '2026-05-10T10:00:00.000Z',
+        localDate: '2026-05-10',
+      },
+    ]);
+
+    // Filter by Push: only the two Push sessions, newest first. The blank
+    // session is excluded because its routine_id is NULL (NULL never equals
+    // a string id), which matches the home-page UX intent.
+    const pushOnly = await listRecentSessionsInline(db, { routineId: push.id });
+    expect(pushOnly.map((s) => s.id)).toEqual(['s-push-2', 's-push-1']);
+
+    // Filter by Pull: only the one Pull session.
+    const pullOnly = await listRecentSessionsInline(db, { routineId: pull.id });
+    expect(pullOnly.map((s) => s.id)).toEqual(['s-pull-1']);
+
+    // Filter by an id that doesn't match any session: empty list (this is
+    // the "stale URL ?routine=<deleted-routine>" path).
+    const noMatch = await listRecentSessionsInline(db, {
+      routineId: 'nonexistent-routine-id',
+    });
+    expect(noMatch).toEqual([]);
+  });
+
+  it('excludes soft-deleted sessions from the filtered list (HIST-05 audit-trail invariant)', async () => {
+    const [push] = await db
+      .insert(schema.routines)
+      .values({ slug: 'push', name: 'Push', position: 0 })
+      .returning();
+
+    await db.insert(schema.sessions).values([
+      {
+        id: 's-keep',
+        routineId: push.id,
+        startedAt: '2026-05-08T10:00:00.000Z',
+        localDate: '2026-05-08',
+      },
+      {
+        id: 's-deleted',
+        routineId: push.id,
+        startedAt: '2026-05-09T10:00:00.000Z',
+        localDate: '2026-05-09',
+        isDeleted: true,
+      },
+    ]);
+
+    const out = await listRecentSessionsInline(db, { routineId: push.id });
+    expect(out.map((s) => s.id)).toEqual(['s-keep']);
+  });
+
+  it('treats undefined/null routineId as "no filter"', async () => {
+    const [push] = await db
+      .insert(schema.routines)
+      .values({ slug: 'push', name: 'Push', position: 0 })
+      .returning();
+    await db.insert(schema.sessions).values({
+      id: 's-1',
+      routineId: push.id,
+      startedAt: '2026-05-08T10:00:00.000Z',
+      localDate: '2026-05-08',
+    });
+
+    expect(await listRecentSessionsInline(db, {})).toHaveLength(1);
+    expect(
+      await listRecentSessionsInline(db, { routineId: undefined }),
+    ).toHaveLength(1);
+    expect(
+      await listRecentSessionsInline(db, { routineId: null }),
+    ).toHaveLength(1);
   });
 });

@@ -3,16 +3,22 @@
 // src/app/actions/sets.ts
 //
 // Server Actions for set CRUD — invoked by the active-session UI's TanStack
-// Query mutations (use-active-session.ts). These are the public-internet
-// entry points that the threat register (T-01-03-01..06) governs.
+// Query mutations (use-active-session.ts) AND by the past-session edit UI
+// (Plan 01-05). Same writes; different consumer surfaces.
 //
-// Important: do NOT call revalidatePath('/log/[sessionId]') from these
+// IMPORTANT: do NOT call revalidatePath('/log/[sessionId]') from these
 // actions. The active-session route is owned by TanStack Query during a live
-// session; an RSC re-render here would stomp on the optimistic cache state
-// and the user would see their just-logged set "blink" away then back. We
-// only revalidate when the user navigates away (endSession in sessions.ts).
+// session; an RSC re-render there would stomp on the optimistic cache state
+// and the user would see their just-logged set "blink" away then back.
+//
+// We DO call revalidatePath('/sessions/[id]', 'page') after edit/delete so
+// the read-only past-session detail view (Plan 01-05) re-renders with the
+// updated DB state. The /log/* tree is a separate route segment and is
+// untouched by this revalidate, so the active-session optimistic cache is
+// safe.
 
 import { z } from 'zod';
+import { revalidatePath } from 'next/cache';
 import {
   insertSet,
   updateSet,
@@ -60,11 +66,20 @@ export async function editSetAction(input: EditSetActionInput): Promise<void> {
   const parsed = EditSetSchema.parse(input);
   const { setId, ...patch } = parsed;
   await updateSet(setId, patch);
+  // HIST-05: ensure the past-session detail RSC re-renders with the new value.
+  // Layout-level revalidate covers `/sessions/[id]` and `/sessions/[id]/compare`.
+  // Does NOT touch `/log/[id]` (different route segment) so active-session
+  // TanStack Query cache is not invalidated.
+  revalidatePath('/sessions/[sessionId]', 'layout');
 }
 
 export async function deleteSetAction(setId: string): Promise<void> {
   idSchema.parse(setId);
   await softDeleteSet(setId);
+  // HIST-05: see editSetAction note. Soft-deleted sets are filtered by
+  // loadSessionView's WHERE clause, so the row vanishes from the view after
+  // revalidate without touching DB integrity.
+  revalidatePath('/sessions/[sessionId]', 'layout');
 }
 
 export async function tagAsDropTierAction(
