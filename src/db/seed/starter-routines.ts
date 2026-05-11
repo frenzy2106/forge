@@ -48,7 +48,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'push',
     primaryMuscle: 'chest',
     isCompound: true,
-    defaultRestSeconds: 120,
+    defaultRestSeconds: 60,
     notes: 'Max 40 kg (per Workout-Plan.md, 2026-05-10)',
   },
   {
@@ -57,7 +57,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'push',
     primaryMuscle: 'chest',
     isCompound: true,
-    defaultRestSeconds: 120,
+    defaultRestSeconds: 60,
     notes: 'Max 40 kg',
   },
   {
@@ -66,7 +66,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'push',
     primaryMuscle: 'chest',
     isCompound: false,
-    defaultRestSeconds: 90,
+    defaultRestSeconds: 60,
     notes: 'Max TBD',
   },
   {
@@ -75,7 +75,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'push',
     primaryMuscle: 'shoulders',
     isCompound: true,
-    defaultRestSeconds: 120,
+    defaultRestSeconds: 60,
     notes: 'Max 10 kg each',
   },
   {
@@ -113,7 +113,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'pull',
     primaryMuscle: 'back',
     isCompound: true,
-    defaultRestSeconds: 90,
+    defaultRestSeconds: 60,
     notes: 'Pick 2 of 3 lat pulldowns per session',
   },
   {
@@ -122,7 +122,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'pull',
     primaryMuscle: 'back',
     isCompound: true,
-    defaultRestSeconds: 90,
+    defaultRestSeconds: 60,
     notes: 'Pick 2 of 3 lat pulldowns per session',
   },
   {
@@ -131,7 +131,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'pull',
     primaryMuscle: 'back',
     isCompound: true,
-    defaultRestSeconds: 90,
+    defaultRestSeconds: 60,
     notes: 'Pick 2 of 3 lat pulldowns per session',
   },
   {
@@ -140,7 +140,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'pull',
     primaryMuscle: 'back',
     isCompound: true,
-    defaultRestSeconds: 90,
+    defaultRestSeconds: 60,
   },
   {
     slug: 'deadlift',
@@ -148,7 +148,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'pull',
     primaryMuscle: 'back',
     isCompound: true,
-    defaultRestSeconds: 180,
+    defaultRestSeconds: 60,
   },
   {
     slug: 'db-row',
@@ -156,7 +156,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'pull',
     primaryMuscle: 'back',
     isCompound: true,
-    defaultRestSeconds: 90,
+    defaultRestSeconds: 60,
     notes: 'Bilateral or unilateral',
   },
   {
@@ -183,7 +183,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'legs',
     primaryMuscle: 'quads',
     isCompound: true,
-    defaultRestSeconds: 120,
+    defaultRestSeconds: 60,
     notes: 'Max 25 kg each',
   },
   {
@@ -192,7 +192,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'legs',
     primaryMuscle: 'quads',
     isCompound: true,
-    defaultRestSeconds: 180,
+    defaultRestSeconds: 60,
     notes: 'Max 90 kg',
   },
   {
@@ -201,7 +201,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'legs',
     primaryMuscle: 'quads',
     isCompound: true,
-    defaultRestSeconds: 120,
+    defaultRestSeconds: 60,
   },
   {
     slug: 'leg-extension',
@@ -225,7 +225,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'legs',
     primaryMuscle: 'quads',
     isCompound: true,
-    defaultRestSeconds: 90,
+    defaultRestSeconds: 60,
   },
   {
     slug: 'standing-calf-raise',
@@ -243,7 +243,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'endurance',
     primaryMuscle: 'full-body',
     isCompound: false,
-    defaultRestSeconds: 30,
+    defaultRestSeconds: 60,
     notes: 'Warm-up',
   },
   {
@@ -252,7 +252,7 @@ export const STARTER_EXERCISES: StarterExerciseSeed[] = [
     category: 'endurance',
     primaryMuscle: 'core',
     isCompound: false,
-    defaultRestSeconds: 30,
+    defaultRestSeconds: 60,
     notes: 'Hold',
   },
   {

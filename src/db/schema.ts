@@ -49,8 +49,10 @@ export const exercises = sqliteTable(
     primaryMuscle: text('primary_muscle'),
     isCompound: integer('is_compound', { mode: 'boolean' }).notNull().default(false),
     defaultUnit: text('default_unit', { enum: ['kg', 'lb'] }).notNull().default('kg'),
-    // CONTEXT D-01g: rest timer auto-starts at this default after a set is logged.
-    defaultRestSeconds: integer('default_rest_seconds').notNull().default(90),
+    // CONTEXT D-01g (REVISED): rest timer is opt-in. When user taps the
+    // clock icon on a logged set, timer starts at this value. For endurance
+    // exercises, this column is repurposed as the station's default duration.
+    defaultRestSeconds: integer('default_rest_seconds').notNull().default(60),
     notes: text('notes'),
     createdAt: text('created_at')
       .notNull()
