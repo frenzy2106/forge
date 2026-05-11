@@ -27,7 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useActiveSession } from '@/hooks/use-active-session';
 import { useRestTimer } from '@/hooks/use-rest-timer';
-import { endSessionAction } from '@/app/actions/sessions';
+import { deleteSessionAction, endSessionAction } from '@/app/actions/sessions';
 import { ExerciseCard } from './exercise-card';
 import { RestTimerBanner } from './rest-timer-banner';
 import { AddExerciseDrawer } from './add-exercise-drawer';
@@ -50,20 +50,35 @@ export function ActiveSession({
   const restTimer = useRestTimer();
   const [addExerciseOpen, setAddExerciseOpen] = useState(false);
   const [endConfirmOpen, setEndConfirmOpen] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [isEnding, startEndTransition] = useTransition();
+  const [isDiscarding, startDiscardTransition] = useTransition();
   const router = useRouter();
 
   const handleEnd = () => {
     startEndTransition(async () => {
       await endSessionAction(sessionId);
-      // Plan 01-04 implements the comparison report; for now we redirect to
-      // the (stubbed) route, where the user can confirm the session ended.
       router.push(`/sessions/${sessionId}/compare`);
+    });
+  };
+
+  const handleDiscard = () => {
+    startDiscardTransition(async () => {
+      await deleteSessionAction(sessionId);
+      router.push('/');
     });
   };
 
   // initialData makes this unreachable at runtime, but TS narrows it.
   if (!sessionView) return null;
+
+  // Total logged sets across all exercises. Used to gate End Session — an
+  // empty session has nothing to compare against and just pollutes history.
+  const totalSets = sessionView.exercises.reduce(
+    (acc, ex) => acc + ex.sets.length,
+    0,
+  );
+  const canEnd = totalSets > 0;
 
   return (
     <main className="min-h-screen pb-32">
@@ -108,17 +123,47 @@ export function ActiveSession({
         </Button>
       </div>
 
-      {/* Persistent End Session button (D-04a) */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background p-3">
-        <Button
-          variant="destructive"
-          size="lg"
-          className="h-14 w-full text-lg"
-          onClick={() => setEndConfirmOpen(true)}
-          disabled={isEnding}
-        >
-          {isEnding ? 'Ending…' : 'End Session'}
-        </Button>
+      {/* Persistent End Session button (D-04a). Disabled when no sets logged
+          — an empty session has nothing to compare and just pollutes history.
+          When disabled, a Discard button appears in its place so the user can
+          cleanly cancel the session. */}
+      <div className="fixed inset-x-0 bottom-0 z-10 space-y-1 border-t bg-background p-3">
+        {canEnd ? (
+          <Button
+            variant="destructive"
+            size="lg"
+            className="h-14 w-full text-lg"
+            onClick={() => setEndConfirmOpen(true)}
+            disabled={isEnding}
+          >
+            {isEnding ? 'Ending…' : 'End Session'}
+          </Button>
+        ) : (
+          <>
+            <Button
+              size="lg"
+              className="h-14 w-full text-lg"
+              disabled
+              aria-disabled="true"
+            >
+              End Session
+            </Button>
+            <div className="flex items-center justify-between gap-2 px-1">
+              <p className="text-xs text-muted-foreground">
+                Log at least one set to end this session
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDiscardConfirmOpen(true)}
+                disabled={isDiscarding}
+                className="text-xs text-muted-foreground hover:text-destructive"
+              >
+                {isDiscarding ? 'Discarding…' : 'Discard session'}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Add exercise drawer */}
@@ -145,6 +190,35 @@ export function ActiveSession({
             </Button>
             <Button onClick={handleEnd} disabled={isEnding}>
               {isEnding ? 'Ending…' : 'End'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Discard empty session confirmation. Soft-delete; row stays in DB
+          for audit but vanishes from every UI. */}
+      <Dialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard this session?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            No sets were logged. The session will be removed from your history.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDiscardConfirmOpen(false)}
+              disabled={isDiscarding}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDiscard}
+              disabled={isDiscarding}
+            >
+              {isDiscarding ? 'Discarding…' : 'Discard'}
             </Button>
           </DialogFooter>
         </DialogContent>

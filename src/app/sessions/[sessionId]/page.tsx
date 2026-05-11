@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatLocal } from '@/lib/dates';
 import { PastSessionView } from './past-session-view';
+import { DeleteSessionButton } from './delete-session-button';
 
 // loadSessionView reads from the per-request DB; we want the freshest data
 // after every mutation (revalidatePath drives this from the Server Action).
@@ -99,6 +100,13 @@ export default async function SessionDetailPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Bottom-right destructive action — soft-delete the session and
+          redirect home. Available on both ended and in-progress sessions
+          so the user can always remove a session from history. */}
+      <div className="flex justify-end pt-2">
+        <DeleteSessionButton sessionId={sessionId} />
+      </div>
     </main>
   );
 }
