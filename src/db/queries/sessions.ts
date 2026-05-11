@@ -169,6 +169,67 @@ export async function findPriorIdenticalSession(
   return loadSessionView(prior.id);
 }
 
+/** For each given exerciseId, return the sets from the most recent prior
+ *  ENDED session that contained that exercise. Used by the active-session UI
+ *  (Plan 01-03) to render ghost-text previous-values per (exerciseId, setPosition)
+ *  per CONTEXT D-01c / LOG-02.
+ *
+ *  Returns: Map<exerciseId, Set[]>  — sets ordered by position then created_at.
+ *  Excludes any prior session older than `maxAgeDays` (default 90) so a
+ *  rebuild of the same routine after a long break starts with a clean slate
+ *  rather than ghost-texting a 2-year-old number. PITFALLS Pitfall #2 §5.
+ *
+ *  Per CONTEXT D-02 / HIST-03: caller renders the "first time" UX from missing
+ *  keys; this function never returns synthetic placeholders. */
+export async function loadPriorPerformances(
+  exerciseIds: string[],
+  beforeUtcIso: string,
+  maxAgeDays = 90,
+): Promise<Map<string, Set[]>> {
+  const result = new Map<string, Set[]>();
+  if (exerciseIds.length === 0) return result;
+
+  const cutoff = new Date(
+    new Date(beforeUtcIso).getTime() - maxAgeDays * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  // One query per exercise. N is small (one routine = ~7 exercises) and the
+  // alternative — a single window-function query — is harder to read and not
+  // measurably faster at this scale. Re-evaluate when phase 3's history view
+  // needs to render this for 12 weeks of sessions.
+  for (const exId of exerciseIds) {
+    const [priorSe] = await db
+      .select({ se: sessionExercises })
+      .from(sessionExercises)
+      .innerJoin(sessions, eq(sessionExercises.sessionId, sessions.id))
+      .where(
+        and(
+          eq(sessionExercises.exerciseId, exId),
+          eq(sessions.isDeleted, false),
+          sql`${sessions.endedAt} IS NOT NULL`,
+          lt(sessions.startedAt, beforeUtcIso),
+          sql`${sessions.startedAt} >= ${cutoff}`,
+        ),
+      )
+      .orderBy(desc(sessions.startedAt))
+      .limit(1);
+
+    if (!priorSe) continue;
+
+    const priorSets = await db
+      .select()
+      .from(sets)
+      .where(
+        and(eq(sets.sessionExerciseId, priorSe.se.id), eq(sets.isDeleted, false)),
+      )
+      .orderBy(asc(sets.position), asc(sets.createdAt));
+
+    if (priorSets.length > 0) result.set(exId, priorSets);
+  }
+
+  return result;
+}
+
 /** Recent (non-deleted) sessions joined with their routine's display name.
  *  Used by the home page's "Recent sessions" card and (later) the history list.
  *  The leftJoin produces routineName=null for blank/ad-hoc sessions. */
