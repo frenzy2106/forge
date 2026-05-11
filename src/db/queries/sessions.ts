@@ -246,10 +246,24 @@ export async function loadPriorPerformances(
 
 /** Recent (non-deleted) sessions joined with their routine's display name.
  *  Used by the home page's "Recent sessions" card and (later) the history list.
- *  The leftJoin produces routineName=null for blank/ad-hoc sessions. */
+ *  The leftJoin produces routineName=null for blank/ad-hoc sessions.
+ *
+ *  HIST-04: optional `routineId` filter. When provided, only sessions whose
+ *  `routine_id` exactly matches are returned. Pass null/undefined to get all
+ *  sessions (the default home-page view).
+ *
+ *  Backwards-compatible call shape: `listRecentSessions(10)` still works
+ *  alongside the new options-bag form `listRecentSessions({ limit, routineId })`. */
 export async function listRecentSessions(
-  limit = 20,
+  optsOrLimit: number | { limit?: number; routineId?: string | null } = {},
 ): Promise<SessionWithRoutineName[]> {
+  const opts =
+    typeof optsOrLimit === 'number' ? { limit: optsOrLimit } : optsOrLimit;
+  const { limit = 20, routineId } = opts;
+
+  const conditions = [eq(sessions.isDeleted, false)];
+  if (routineId) conditions.push(eq(sessions.routineId, routineId));
+
   const rows = await db
     .select({
       session: sessions,
@@ -257,7 +271,7 @@ export async function listRecentSessions(
     })
     .from(sessions)
     .leftJoin(routines, eq(sessions.routineId, routines.id))
-    .where(eq(sessions.isDeleted, false))
+    .where(and(...conditions))
     .orderBy(desc(sessions.startedAt))
     .limit(limit);
 
