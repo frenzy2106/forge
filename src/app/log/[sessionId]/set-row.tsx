@@ -19,7 +19,7 @@
 //     "40" into "4O" or autosuggest a contact name.
 
 import { useRef, useState } from 'react';
-import { CheckIcon } from 'lucide-react';
+import { CheckIcon, TimerIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LongPressMenu } from './long-press-menu';
@@ -44,18 +44,19 @@ type LoggedProps = CommonProps & {
    *  row just dispatches the intent. Returns false (or no callback) to hide
    *  the menu option (e.g. when no chainable parent exists). */
   onTagAsDropTier?: () => void;
+  /** Optional: tap the clock icon to start the rest timer at this exercise's
+   *  default_rest_seconds. Opt-in per CONTEXT.md D-01g (revised — no auto-start). */
+  onStartRestTimer?: () => void;
   draftPosition?: never;
   draftSessionExerciseId?: never;
-  onDraftLogged?: never;
 };
 
 type DraftProps = CommonProps & {
   set?: null;
   draftPosition: number;
   draftSessionExerciseId: string;
-  /** Called after a successful commit so the parent can start the rest timer. */
-  onDraftLogged: () => void;
   onTagAsDropTier?: never;
+  onStartRestTimer?: never;
 };
 
 type Props = LoggedProps | DraftProps;
@@ -111,11 +112,12 @@ export function SetRow(props: Props) {
         reps: isEndurance ? undefined : finalReps,
         durationSeconds: isEndurance ? finalDuration : undefined,
       });
-      // Clear inputs after commit so the next draft starts fresh
+      // Clear inputs after commit so the next draft starts fresh.
+      // Rest timer is opt-in (D-01g revised) — user taps the clock icon
+      // on a logged row to start it; no auto-start on commit.
       setWeight('');
       setReps('');
       setDuration('');
-      props.onDraftLogged();
     } else if (props.set) {
       // Edit mode: only update if values actually changed
       const patch: Record<string, number | undefined> = {};
@@ -239,6 +241,21 @@ export function SetRow(props: Props) {
         >
           <CheckIcon className="size-5" />
         </Button>
+
+        {/* Opt-in rest timer button — only on logged sets when the parent
+            wired up onStartRestTimer (D-01g revised). Tap to start the timer
+            at this exercise's default_rest_seconds. No auto-start. */}
+        {!isDraft && props.onStartRestTimer && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={props.onStartRestTimer}
+            className="size-12 shrink-0 text-muted-foreground"
+            aria-label="Start rest timer"
+          >
+            <TimerIcon className="size-5" />
+          </Button>
+        )}
       </div>
 
       {/* Long-press context menu — only for logged sets */}

@@ -91,7 +91,7 @@ export function ActiveSession({
             exercise={exercise}
             sets={sets}
             priorSets={priorPerformances[exercise.id]}
-            onSetLogged={(restSeconds) => restTimer.start(restSeconds)}
+            onStartRestTimer={(restSeconds) => restTimer.start(restSeconds)}
           />
         ))}
       </div>

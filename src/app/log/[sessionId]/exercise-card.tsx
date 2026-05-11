@@ -26,9 +26,10 @@ type Props = {
   exercise: Exercise;
   sets: Set[];
   priorSets: Set[] | undefined;
-  /** Called after a successful set commit so the parent (ActiveSession) can
-   *  start the rest timer at this exercise's defaultRestSeconds. */
-  onSetLogged: (restSeconds: number) => void;
+  /** Called when the user taps the timer icon on a logged set. The parent
+   *  (ActiveSession) starts the rest timer at this exercise's
+   *  defaultRestSeconds. Opt-in per CONTEXT.md D-01g (revised — no auto-start). */
+  onStartRestTimer: (restSeconds: number) => void;
   /** Marks the active exercise visually so the user can scroll back to it
    *  after using the +Add Exercise drawer. */
   isActive?: boolean;
@@ -40,7 +41,7 @@ export function ExerciseCard({
   exercise,
   sets,
   priorSets,
-  onSetLogged,
+  onStartRestTimer,
   isActive,
 }: Props) {
   const tagDrop = useTagAsDropTier(sessionId);
@@ -97,6 +98,9 @@ export function ExerciseCard({
                     }
                   : undefined
               }
+              onStartRestTimer={() =>
+                onStartRestTimer(exercise.defaultRestSeconds)
+              }
             />
           );
         })}
@@ -108,7 +112,6 @@ export function ExerciseCard({
           sessionId={sessionId}
           draftSessionExerciseId={sessionExercise.id}
           draftPosition={nextPosition}
-          onDraftLogged={() => onSetLogged(exercise.defaultRestSeconds)}
         />
       </CardContent>
     </Card>
