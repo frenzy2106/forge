@@ -1,0 +1,116 @@
+'use client';
+
+// One card per session_exercise. Renders the persisted set rows in order
+// followed by a single draft row for the next set. Drop-tier sets render
+// inline (visually indented) directly after their parent — the SQL ORDER BY
+// position, created_at already produces this order.
+//
+// `nextPosition` follows the convention "max position of NON-drop sets +1"
+// because drop tiers re-use their parent's position. The first set in an
+// empty exercise card is position 1.
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { useTagAsDropTier } from '@/hooks/use-active-session';
+import { matchPriorPerformance } from '@/domain/previous-set';
+import { SetRow } from './set-row';
+import type { Exercise, SessionExercise, Set } from '@/db/schema';
+
+type Props = {
+  sessionId: string;
+  sessionExercise: SessionExercise;
+  exercise: Exercise;
+  sets: Set[];
+  priorSets: Set[] | undefined;
+  /** Called after a successful set commit so the parent (ActiveSession) can
+   *  start the rest timer at this exercise's defaultRestSeconds. */
+  onSetLogged: (restSeconds: number) => void;
+  /** Marks the active exercise visually so the user can scroll back to it
+   *  after using the +Add Exercise drawer. */
+  isActive?: boolean;
+};
+
+export function ExerciseCard({
+  sessionId,
+  sessionExercise,
+  exercise,
+  sets,
+  priorSets,
+  onSetLogged,
+  isActive,
+}: Props) {
+  const tagDrop = useTagAsDropTier(sessionId);
+
+  // Compute the next top-line set position. Drop tiers share their parent's
+  // position so we exclude them from the max() calculation.
+  const topPositions = sets.filter((s) => !s.isDropTier).map((s) => s.position);
+  const nextPosition =
+    (topPositions.length > 0 ? Math.max(...topPositions) : 0) + 1;
+
+  /** Resolve the parent_set_id for tagging `targetSet` as a drop tier. The
+   *  convention: parent = the most recent non-drop set in this exercise that
+   *  was created before `targetSet` (chronological predecessor at the
+   *  comparable spot). Returns null when no chainable parent exists — in
+   *  that case the menu hides the option. */
+  const resolveParentSetIdFor = (targetSet: Set): string | null => {
+    const candidates = sets
+      .filter(
+        (s) =>
+          s.id !== targetSet.id &&
+          !s.isDropTier &&
+          s.createdAt <= targetSet.createdAt,
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return candidates[0]?.id ?? null;
+  };
+
+  return (
+    <Card
+      data-active={isActive ? 'true' : undefined}
+      className={
+        isActive
+          ? 'ring-2 ring-primary transition-shadow'
+          : 'transition-shadow'
+      }
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{exercise.displayName}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {sets.map((s) => {
+          const parentId = resolveParentSetIdFor(s);
+          return (
+            <SetRow
+              key={s.id}
+              set={s}
+              exercise={exercise}
+              priorSet={matchPriorPerformance(priorSets, s.position)}
+              sessionId={sessionId}
+              onTagAsDropTier={
+                parentId
+                  ? () => {
+                      tagDrop.mutate({ setId: s.id, parentSetId: parentId });
+                    }
+                  : undefined
+              }
+            />
+          );
+        })}
+
+        {/* Single persistent draft row for the next set */}
+        <SetRow
+          exercise={exercise}
+          priorSet={matchPriorPerformance(priorSets, nextPosition)}
+          sessionId={sessionId}
+          draftSessionExerciseId={sessionExercise.id}
+          draftPosition={nextPosition}
+          onDraftLogged={() => onSetLogged(exercise.defaultRestSeconds)}
+        />
+      </CardContent>
+    </Card>
+  );
+}
