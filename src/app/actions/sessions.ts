@@ -63,3 +63,32 @@ export async function endSessionAction(sessionId: string): Promise<void> {
   revalidatePath('/');
   revalidatePath(`/sessions/${sessionId}/compare`);
 }
+
+// ─── saveSessionNotesAction (Plan 01-04 / D-02f) ─────────────────────────
+//
+// Notes field on the comparison report saves on blur. Plain text only —
+// React renders via JSX so XSS is not a concern (no dangerouslySetInnerHTML).
+// 4000-char cap prevents pathological storage growth from a long-press paste.
+//
+// We update sessions.notes directly and revalidate the compare path so a
+// post-save refresh reflects the persisted value. revalidating `/` is a
+// no-op (notes aren't shown on home) but we keep that path's data cache
+// uninvolved.
+
+const SaveNotesSchema = z.object({
+  sessionId: z.string().min(1),
+  notes: z.string().max(4000),
+});
+
+export async function saveSessionNotesAction(input: {
+  sessionId: string;
+  notes: string;
+}): Promise<void> {
+  const parsed = SaveNotesSchema.parse(input);
+  const now = nowUtcIso();
+  await db
+    .update(sessions)
+    .set({ notes: parsed.notes, updatedAt: now })
+    .where(eq(sessions.id, parsed.sessionId));
+  revalidatePath(`/sessions/${parsed.sessionId}/compare`);
+}
