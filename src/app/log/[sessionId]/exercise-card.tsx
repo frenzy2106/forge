@@ -82,6 +82,32 @@ export function ExerciseCard({
         <CardTitle className="text-base">{exercise.displayName}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
+        {/* Column headers — clarify which input is weight vs reps (or duration
+            for endurance). Aligned with SetRow's flex column widths:
+              w-8 set-number | w-20 weight | × | w-16 reps | done | timer
+            For endurance variant: w-8 set-number | flex-1 duration | done. */}
+        {exercise.category === 'endurance' ? (
+          <div
+            className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+            aria-hidden="true"
+          >
+            <div className="w-8 text-center">#</div>
+            <div className="flex-1 text-center">sec</div>
+            <div className="size-12" />
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+            aria-hidden="true"
+          >
+            <div className="w-8 text-center">#</div>
+            <div className="w-20 text-center">kg</div>
+            <span className="opacity-0">×</span>
+            <div className="w-16 text-center">reps</div>
+            <div className="size-12" />
+          </div>
+        )}
+
         {sets.map((s) => {
           const parentId = resolveParentSetIdFor(s);
           return (
