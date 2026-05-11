@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/hooks/use-rest-timer.test.tsx
 //
 // Tests for useRestTimer (CONTEXT D-01g — sticky banner with countdown,

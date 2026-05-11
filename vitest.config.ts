@@ -20,6 +20,8 @@ export default defineConfig({
     pool: 'forks',
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    environmentMatchGlobs: [['src/**/*.test.tsx', 'happy-dom']],
+    // Hook tests opt into happy-dom via the per-file `@vitest-environment`
+    // directive; vitest 4 dropped environmentMatchGlobs in favor of projects,
+    // and the directive is the simplest single-config alternative.
   },
 });

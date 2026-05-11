@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/hooks/use-active-session.test.tsx
 //
 // Tests the optimistic logSet mutation behavior (T7) — the single most
