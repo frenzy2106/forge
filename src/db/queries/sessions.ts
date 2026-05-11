@@ -96,42 +96,42 @@ export async function createSessionFromRoutine(
 
 /** Eager-loaded view: session + (optional) routine + ordered list of
  *  (sessionExercise, exercise, sets[]). Soft-deleted sets are excluded;
- *  soft-deleted sessions return null. */
+ *  soft-deleted sessions return null.
+ *
+ *  Perf: after the session row is fetched, the routine / exercise-rows / set-rows
+ *  queries all only depend on session.id (or session.routineId), so they fire
+ *  in parallel via Promise.all. With Vercel function co-located in bom1 with
+ *  Turso, this collapses from ~4 serial round trips to ~2. */
 export async function loadSessionView(id: string): Promise<SessionView | null> {
   const [s] = await db.select().from(sessions).where(eq(sessions.id, id));
   if (!s || s.isDeleted) return null;
 
-  let routine: Routine | null = null;
-  if (s.routineId) {
-    const [r] = await db.select().from(routines).where(eq(routines.id, s.routineId));
-    routine = r ?? null;
-  }
-
-  const exRows = await db
-    .select({ se: sessionExercises, ex: exercises })
-    .from(sessionExercises)
-    .innerJoin(exercises, eq(sessionExercises.exerciseId, exercises.id))
-    .where(eq(sessionExercises.sessionId, id))
-    .orderBy(asc(sessionExercises.position));
-
-  // Subquery scope: only sets whose session_exercise belongs to this session.
-  // Drizzle's typed `inArray(... select ...)` is ergonomic but generates an IN
-  // expression with full driver round-trips; raw sql with parameterised id is
-  // simpler and the compiled SQL still parameterises ${id}.
-  const setRows = await db
-    .select()
-    .from(sets)
-    .where(
-      and(
-        eq(sets.isDeleted, false),
-        sql`${sets.sessionExerciseId} IN (SELECT id FROM session_exercises WHERE session_id = ${id})`,
-      ),
-    )
-    .orderBy(asc(sets.position), asc(sets.createdAt));
+  const [routineResult, exRows, setRows] = await Promise.all([
+    s.routineId
+      ? db.select().from(routines).where(eq(routines.id, s.routineId))
+      : Promise.resolve([] as Routine[]),
+    db
+      .select({ se: sessionExercises, ex: exercises })
+      .from(sessionExercises)
+      .innerJoin(exercises, eq(sessionExercises.exerciseId, exercises.id))
+      .where(eq(sessionExercises.sessionId, id))
+      .orderBy(asc(sessionExercises.position)),
+    // Subquery scope: only sets whose session_exercise belongs to this session.
+    db
+      .select()
+      .from(sets)
+      .where(
+        and(
+          eq(sets.isDeleted, false),
+          sql`${sets.sessionExerciseId} IN (SELECT id FROM session_exercises WHERE session_id = ${id})`,
+        ),
+      )
+      .orderBy(asc(sets.position), asc(sets.createdAt)),
+  ]);
 
   return {
     session: s,
-    routine,
+    routine: routineResult[0] ?? null,
     exercises: exRows.map((row) => ({
       sessionExercise: row.se,
       exercise: row.ex,
@@ -193,37 +193,51 @@ export async function loadPriorPerformances(
     new Date(beforeUtcIso).getTime() - maxAgeDays * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  // One query per exercise. N is small (one routine = ~7 exercises) and the
-  // alternative — a single window-function query — is harder to read and not
-  // measurably faster at this scale. Re-evaluate when phase 3's history view
-  // needs to render this for 12 weeks of sessions.
-  for (const exId of exerciseIds) {
-    const [priorSe] = await db
-      .select({ se: sessionExercises })
-      .from(sessionExercises)
-      .innerJoin(sessions, eq(sessionExercises.sessionId, sessions.id))
-      .where(
-        and(
-          eq(sessionExercises.exerciseId, exId),
-          eq(sessions.isDeleted, false),
-          sql`${sessions.endedAt} IS NOT NULL`,
-          lt(sessions.startedAt, beforeUtcIso),
-          sql`${sessions.startedAt} >= ${cutoff}`,
-        ),
-      )
-      .orderBy(desc(sessions.startedAt))
-      .limit(1);
+  // Perf: fan out the 7 prior-session lookups in parallel, then fan out the
+  // 7 prior-sets lookups in parallel. With Vercel co-located in bom1 with Turso
+  // this collapses from 14 serial RTTs to 2 RTT batches.
+  // For a single user at this scale the window-function alternative isn't
+  // measurably faster and is much harder to read.
+  const priorSes = await Promise.all(
+    exerciseIds.map(async (exId) => {
+      const [priorSe] = await db
+        .select({ se: sessionExercises })
+        .from(sessionExercises)
+        .innerJoin(sessions, eq(sessionExercises.sessionId, sessions.id))
+        .where(
+          and(
+            eq(sessionExercises.exerciseId, exId),
+            eq(sessions.isDeleted, false),
+            sql`${sessions.endedAt} IS NOT NULL`,
+            lt(sessions.startedAt, beforeUtcIso),
+            sql`${sessions.startedAt} >= ${cutoff}`,
+          ),
+        )
+        .orderBy(desc(sessions.startedAt))
+        .limit(1);
+      return { exId, sessionExerciseId: priorSe?.se.id };
+    }),
+  );
 
-    if (!priorSe) continue;
+  const setLoads = await Promise.all(
+    priorSes
+      .filter((r) => r.sessionExerciseId)
+      .map(async (r) => {
+        const priorSets = await db
+          .select()
+          .from(sets)
+          .where(
+            and(
+              eq(sets.sessionExerciseId, r.sessionExerciseId!),
+              eq(sets.isDeleted, false),
+            ),
+          )
+          .orderBy(asc(sets.position), asc(sets.createdAt));
+        return { exId: r.exId, priorSets };
+      }),
+  );
 
-    const priorSets = await db
-      .select()
-      .from(sets)
-      .where(
-        and(eq(sets.sessionExerciseId, priorSe.se.id), eq(sets.isDeleted, false)),
-      )
-      .orderBy(asc(sets.position), asc(sets.createdAt));
-
+  for (const { exId, priorSets } of setLoads) {
     if (priorSets.length > 0) result.set(exId, priorSets);
   }
 
