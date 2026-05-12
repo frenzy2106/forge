@@ -9,6 +9,7 @@
 // because drop tiers re-use their parent's position. The first set in an
 // empty exercise card is position 1.
 
+import { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -19,6 +20,12 @@ import { useTagAsDropTier } from '@/hooks/use-active-session';
 import { matchPriorPerformance } from '@/domain/previous-set';
 import { SetRow } from './set-row';
 import type { Exercise, SessionExercise, Set } from '@/db/schema';
+
+type DraftPrefill = {
+  weightKg?: number;
+  reps?: number;
+  durationSeconds?: number;
+} | null;
 
 type Props = {
   sessionId: string;
@@ -45,6 +52,20 @@ export function ExerciseCard({
   isActive,
 }: Props) {
   const tagDrop = useTagAsDropTier(sessionId);
+
+  // Draft prefill: when the user taps copy on a logged set, we stash that
+  // set's values here. The draft row's useEffect picks up the new object
+  // reference and mirrors values into its inputs. A fresh object on each
+  // copy ensures successive copies of the same set still trigger the effect.
+  const [draftPrefill, setDraftPrefill] = useState<DraftPrefill>(null);
+
+  const handleCopyToDraft = (s: Set) => {
+    setDraftPrefill({
+      weightKg: s.weightKg ?? undefined,
+      reps: s.reps ?? undefined,
+      durationSeconds: s.durationSeconds ?? undefined,
+    });
+  };
 
   // Compute the next top-line set position. Drop tiers share their parent's
   // position so we exclude them from the max() calculation.
@@ -127,17 +148,20 @@ export function ExerciseCard({
               onStartRestTimer={() =>
                 onStartRestTimer(exercise.defaultRestSeconds)
               }
+              onCopyToDraft={() => handleCopyToDraft(s)}
             />
           );
         })}
 
-        {/* Single persistent draft row for the next set */}
+        {/* Single persistent draft row for the next set. The prefill prop
+            lets the user "copy" any logged set's values into this draft. */}
         <SetRow
           exercise={exercise}
           priorSet={matchPriorPerformance(priorSets, nextPosition)}
           sessionId={sessionId}
           draftSessionExerciseId={sessionExercise.id}
           draftPosition={nextPosition}
+          prefill={draftPrefill}
         />
       </CardContent>
     </Card>

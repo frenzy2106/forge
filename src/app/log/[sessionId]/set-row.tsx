@@ -18,8 +18,8 @@
 //   - autoComplete='off' + spellCheck=false so iOS doesn't try to correct
 //     "40" into "4O" or autosuggest a contact name.
 
-import { useRef, useState } from 'react';
-import { CheckIcon, TimerIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CheckIcon, CopyIcon, TimerIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LongPressMenu } from './long-press-menu';
@@ -47,16 +47,27 @@ type LoggedProps = CommonProps & {
   /** Optional: tap the clock icon to start the rest timer at this exercise's
    *  default_rest_seconds. Opt-in per CONTEXT.md D-01g (revised — no auto-start). */
   onStartRestTimer?: () => void;
+  /** Optional: tap the copy icon to copy this set's values into the next
+   *  draft row. Common case: user repeats the exact same set. */
+  onCopyToDraft?: () => void;
   draftPosition?: never;
   draftSessionExerciseId?: never;
+  prefill?: never;
 };
 
 type DraftProps = CommonProps & {
   set?: null;
   draftPosition: number;
   draftSessionExerciseId: string;
+  /** When the parent triggers "copy from logged set N", it sets a new
+   *  prefill object here. The draft row's input state syncs to the values
+   *  via useEffect. A new object reference (even with the same values)
+   *  re-runs the effect — by design — so successive copies of the same
+   *  set work as expected. Cleared after commit. */
+  prefill?: { weightKg?: number; reps?: number; durationSeconds?: number } | null;
   onTagAsDropTier?: never;
   onStartRestTimer?: never;
+  onCopyToDraft?: never;
 };
 
 type Props = LoggedProps | DraftProps;
@@ -84,6 +95,18 @@ export function SetRow(props: Props) {
   const logSet = useLogSetOptimistic(sessionId);
   const editSet = useEditSet(sessionId);
   const deleteSet = useDeleteSet(sessionId);
+
+  // Draft prefill: when the parent triggers "copy from logged set N", it
+  // bumps `prefill` to a fresh object. We mirror it into local input state
+  // so the user can either tap ✓ to commit identical, or tweak first.
+  const prefill = isDraft ? props.prefill ?? null : null;
+  useEffect(() => {
+    if (!prefill) return;
+    if (prefill.weightKg != null) setWeight(String(prefill.weightKg));
+    if (prefill.reps != null) setReps(String(prefill.reps));
+    if (prefill.durationSeconds != null)
+      setDuration(String(prefill.durationSeconds));
+  }, [prefill]);
 
   const ghostWeight = priorSet?.weightKg ?? null;
   const ghostReps = priorSet?.reps ?? null;
@@ -254,6 +277,21 @@ export function SetRow(props: Props) {
             aria-label="Start rest timer"
           >
             <TimerIcon className="size-5" />
+          </Button>
+        )}
+
+        {/* Copy-to-draft button — only on logged sets. Tap to fill the
+            next draft row with this set's weight/reps. Then user taps ✓
+            to commit identical (1 tap), or tweaks first. */}
+        {!isDraft && props.onCopyToDraft && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={props.onCopyToDraft}
+            className="size-12 shrink-0 text-muted-foreground"
+            aria-label="Copy set to next draft"
+          >
+            <CopyIcon className="size-5" />
           </Button>
         )}
       </div>
