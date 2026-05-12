@@ -55,7 +55,6 @@ export function AddExerciseDrawer({
   const [query, setQuery] = useState('');
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState<Category>('push');
-  const [newRest, setNewRest] = useState('60');
   const [creating, startCreating] = useTransition();
   const addEx = useAddExerciseToSession(sessionId);
 
@@ -66,7 +65,6 @@ export function AddExerciseDrawer({
       setQuery('');
       setNewName('');
       setNewCategory('push');
-      setNewRest('60');
     }
     onOpenChange(next);
   };
@@ -88,12 +86,11 @@ export function AddExerciseDrawer({
   const handleCreateAndAdd = () => {
     const name = newName.trim();
     if (!name) return;
-    const restSeconds = Number.parseInt(newRest, 10);
     startCreating(async () => {
       const created = await createExerciseAction({
         displayName: name,
         category: newCategory,
-        defaultRestSeconds: Number.isFinite(restSeconds) ? restSeconds : 60,
+        defaultRestSeconds: 60,
       });
       // Construct an Exercise-shaped object for the optimistic cache.
       const optimisticExercise: Exercise = {
@@ -104,7 +101,7 @@ export function AddExerciseDrawer({
         primaryMuscle: null,
         isCompound: false,
         defaultUnit: 'kg',
-        defaultRestSeconds: Number.isFinite(restSeconds) ? restSeconds : 60,
+        defaultRestSeconds: 60,
         notes: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -186,7 +183,28 @@ export function AddExerciseDrawer({
         )}
 
         {mode === 'create' && (
-          <div className="space-y-4 px-4 pb-6">
+          <div className="px-4 pb-6">
+            {/* Action row first — keyboard pops up after Name input is
+                focused; placing actions ABOVE the input keeps them visible
+                regardless of keyboard height. */}
+            <div className="mb-3 flex gap-2">
+              <Button
+                variant="outline"
+                className="h-12 flex-1"
+                onClick={() => setMode('search')}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="h-12 flex-1"
+                onClick={handleCreateAndAdd}
+                disabled={creating || !newName.trim()}
+              >
+                {creating ? 'Creating…' : 'Create & add'}
+              </Button>
+            </div>
+
             <div className="space-y-1">
               <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Name
@@ -202,7 +220,7 @@ export function AddExerciseDrawer({
               />
             </div>
 
-            <div className="space-y-1">
+            <div className="mt-3 space-y-1">
               <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Category
               </label>
@@ -219,38 +237,6 @@ export function AddExerciseDrawer({
                   </Button>
                 ))}
               </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Default rest (seconds)
-              </label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                value={newRest}
-                onChange={(e) => setNewRest(e.target.value)}
-                className="h-12 w-24 text-center"
-                aria-label="Default rest seconds"
-              />
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                className="h-12 flex-1"
-                onClick={() => setMode('search')}
-                disabled={creating}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="h-12 flex-1"
-                onClick={handleCreateAndAdd}
-                disabled={creating || !newName.trim()}
-              >
-                {creating ? 'Creating…' : 'Create & add'}
-              </Button>
             </div>
           </div>
         )}
